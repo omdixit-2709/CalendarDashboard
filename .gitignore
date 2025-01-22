@@ -24,3 +24,6 @@ yarn-error.log*
 # Build files
 /frontend/build
 "@ | Out-File -FilePath ".gitignore" -Encoding UTF8
+
+sessions/
+sessions.sqlite
