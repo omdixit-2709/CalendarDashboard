@@ -6,6 +6,7 @@ const path = require('path');
 const calendarRoutes = require('./routes/calendar')
 const SQLiteStore = require('connect-sqlite3')(session);
 const fs = require('fs');
+
 // Load environment variables with explicit path
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
@@ -19,16 +20,11 @@ if (missingEnvVars.length > 0) {
     process.exit(1);
 }
 
-// Debug environment variables (remove in production)
-console.log('Environment Check:');
-console.log('PORT:', process.env.PORT || 5001);
-console.log('GOOGLE_CLIENT_ID exists:', !!process.env.GOOGLE_CLIENT_ID);
-console.log('GOOGLE_CLIENT_SECRET exists:', !!process.env.GOOGLE_CLIENT_SECRET);
-
 const { connectDB } = require('./config/db');
 require('./config/passport');
 const authRoutes = require('./routes/auth');
 
+// Ensure sessions directory exists
 const sessionsDir = path.join(__dirname, '../sessions');
 if (!fs.existsSync(sessionsDir)){
     fs.mkdirSync(sessionsDir);
@@ -38,7 +34,7 @@ const app = express();
 
 // Error handling middleware
 const errorHandler = (err, req, res, next) => {
-    console.error(err.stack);
+    console.error('Error:', err.message);
     res.status(500).json({ error: 'Something went wrong!' });
 };
 
@@ -48,14 +44,15 @@ connectDB().catch(err => {
     process.exit(1);
 });
 
-// Middleware
-app.use(cors({
-    origin: 'http://localhost:3000',
+// CORS configuration for production
+const corsOptions = {
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
-}));
+};
 
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -66,7 +63,7 @@ app.use(session({
         dir: './sessions',
         table: 'sessions'
     }),
-    secret: process.env.SESSION_SECRET || 'your_session_secret',
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     name: 'calendar-session',
@@ -74,22 +71,27 @@ app.use(session({
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax'
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : undefined
     }
 }));
 
 // Initialize passport
 app.use(passport.initialize());
 app.use(passport.session());
-app.use('/auth', authRoutes);
-app.use('/calendar', calendarRoutes);
 
 // Routes
 app.use('/auth', authRoutes);
+app.use('/calendar', calendarRoutes);
 
 // Health check route
 app.get('/health', (req, res) => {
-    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+    res.json({ 
+        status: 'healthy', 
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV,
+        clientUrl: process.env.CLIENT_URL
+    });
 });
 
 // Basic route
@@ -97,8 +99,10 @@ app.get('/', (req, res) => {
     res.json({ 
         message: 'Calendar Dashboard API',
         version: '1.0.0',
+        environment: process.env.NODE_ENV,
         endpoints: {
             auth: '/auth',
+            calendar: '/calendar',
             health: '/health'
         }
     });
@@ -116,38 +120,52 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5001;
 let server;
 
-const startServer = (port) => {
+const startServer = () => {
     return new Promise((resolve, reject) => {
-        server = app.listen(port, () => {
-            console.log(`Server running on port ${port}`);
+        server = app.listen(PORT, '0.0.0.0', () => {
+            console.log(`Server running on port ${PORT}`);
+            console.log(`Environment: ${process.env.NODE_ENV}`);
+            console.log(`Client URL: ${process.env.CLIENT_URL}`);
             resolve(server);
         }).on('error', (err) => {
-            if (err.code === 'EADDRINUSE') {
-                console.log(`Port ${port} is busy, trying ${port + 1}`);
-                resolve(startServer(port + 1));
-            } else {
-                reject(err);
-            }
+            reject(err);
         });
     });
 };
 
+// Graceful shutdown handling
+const shutdown = async () => {
+    console.log('Shutting down gracefully...');
+    try {
+        await new Promise((resolve) => {
+            server.close(resolve);
+        });
+        console.log('Server closed successfully');
+        process.exit(0);
+    } catch (err) {
+        console.error('Error during shutdown:', err);
+        process.exit(1);
+    }
+};
+
 // Start server with error handling
-startServer(PORT).catch(err => {
+startServer().catch(err => {
     console.error('Failed to start server:', err);
     process.exit(1);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-    console.log('SIGTERM received. Shutting down gracefully...');
-    server.close(() => {
-        console.log('Server closed');
-        process.exit(0);
-    });
-});
+// Signal handlers
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
+// Uncaught error handlers
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    // Application specific logging, throwing an error, or other logic here
 });
+
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    shutdown();
+});
+
+module.exports = app; // For testing purposes
