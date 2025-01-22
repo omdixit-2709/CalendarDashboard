@@ -4,7 +4,8 @@ const session = require('express-session');
 const passport = require('passport');
 const path = require('path');
 const calendarRoutes = require('./routes/calendar')
-
+const SQLiteStore = require('connect-sqlite3')(session);
+const fs = require('fs');
 // Load environment variables with explicit path
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
@@ -27,6 +28,11 @@ console.log('GOOGLE_CLIENT_SECRET exists:', !!process.env.GOOGLE_CLIENT_SECRET);
 const { connectDB } = require('./config/db');
 require('./config/passport');
 const authRoutes = require('./routes/auth');
+
+const sessionsDir = path.join(__dirname, '../sessions');
+if (!fs.existsSync(sessionsDir)){
+    fs.mkdirSync(sessionsDir);
+}
 
 const app = express();
 
@@ -55,7 +61,12 @@ app.use(express.urlencoded({ extended: true }));
 
 // Session configuration
 app.use(session({
-    secret: process.env.SESSION_SECRET,
+    store: new SQLiteStore({
+        db: 'sessions.sqlite',
+        dir: './sessions',
+        table: 'sessions'
+    }),
+    secret: process.env.SESSION_SECRET || 'your_session_secret',
     resave: false,
     saveUninitialized: false,
     name: 'calendar-session',
