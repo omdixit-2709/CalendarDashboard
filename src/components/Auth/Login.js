@@ -2,8 +2,11 @@ import React from 'react';
 import { Calendar } from 'lucide-react';
 
 const Login = () => {
+    const API_URL = process.env.REACT_APP_API_URL || 'https://calendar-dashboard-backend.onrender.com';
+
     const handleGoogleLogin = () => {
-        window.location.href = 'https://calendar-dashboard-backend.onrender.com/auth/google';
+        // Use the environment variable for the API URL
+        window.location.href = `${API_URL}/auth/google`;
     };
 
     // Add handlers for terms and privacy links
