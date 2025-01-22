@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-const api = axios.create({
-  baseURL: 'https://calendar-dashboard-backend.onrender.com/',
-  withCredentials: true
-});
+const API_URL = process.env.REACT_APP_API_URL || 'https://calendar-dashboard-backend.onrender.com';
 
-export default api;
+const api = axios.create({
+    baseURL: API_URL,
+    withCredentials: true
+});
