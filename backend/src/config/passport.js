@@ -11,23 +11,36 @@ passport.deserializeUser(async (id, done) => {
         const user = await User.findByPk(id);
         done(null, user);
     } catch (error) {
+        console.error('Deserialize User Error:', error);
         done(error, null);
     }
 });
 
-const GOOGLE_CALLBACK_URL = 'https://calendar-dashboard-backend.onrender.com/auth/google/callback';
+// Get callback URL from environment variable or use default
+const GOOGLE_CALLBACK_URL = process.env.API_URL 
+    ? `${process.env.API_URL}/auth/google/callback`
+    : 'https://calendar-dashboard-backend.onrender.com/auth/google/callback';
+
+console.log('Configured callback URL:', GOOGLE_CALLBACK_URL);
 
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: GOOGLE_CALLBACK_URL,
-    passReqToCallback: true
+    passReqToCallback: true,
+    scope: [
+        'profile',
+        'email',
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/calendar.events'
+    ]
 },
 async (req, accessToken, refreshToken, profile, done) => {
     try {
         console.log('Google OAuth Callback received:', { 
             profileId: profile.id,
-            email: profile.emails[0].value 
+            email: profile.emails[0].value,
+            callbackURL: GOOGLE_CALLBACK_URL
         });
 
         // Find or create user
@@ -49,6 +62,9 @@ async (req, accessToken, refreshToken, profile, done) => {
                 user.refreshToken = refreshToken;
             }
             await user.save();
+            console.log('Updated existing user tokens');
+        } else {
+            console.log('Created new user');
         }
 
         return done(null, user);
@@ -57,5 +73,15 @@ async (req, accessToken, refreshToken, profile, done) => {
         return done(error, null);
     }
 }));
+
+// Add error event handlers
+passport.on('error', (err) => {
+    console.error('Passport error:', err);
+});
+
+// Add strategy error handler
+passport.on('strategy_error', (err) => {
+    console.error('Strategy error:', err);
+});
 
 module.exports = passport;

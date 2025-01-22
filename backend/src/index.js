@@ -44,15 +44,37 @@ connectDB().catch(err => {
     process.exit(1);
 });
 
-// CORS configuration for production
 const corsOptions = {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: [
+        'https://calendar-dashboard-wb-git-master-om-dixits-projects.vercel.app',
+        'http://localhost:3000' // Keep for development
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['set-cookie'],
+    maxAge: 86400, // 24 hours
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header(
+        'Access-Control-Allow-Origin', 
+        req.headers.origin || 'https://calendar-dashboard-wb-git-master-om-dixits-projects.vercel.app'
+    );
+    res.header(
+        'Access-Control-Allow-Methods', 
+        'GET,PUT,POST,DELETE,UPDATE,OPTIONS'
+    );
+    res.header(
+        'Access-Control-Allow-Headers', 
+        'X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept'
+    );
+    next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -68,13 +90,16 @@ app.use(session({
     saveUninitialized: false,
     name: 'calendar-session',
     cookie: {
-        secure: process.env.NODE_ENV === 'production',
+        secure: process.env.NODE_ENV === 'production', // true in production
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : undefined
+        sameSite: 'none', // important for cross-site cookies
+        domain: process.env.NODE_ENV === 'production' 
+            ? '.vercel.app'  // Allow cookies for all subdomains
+            : 'localhost'
     }
 }));
+
 
 // Initialize passport
 app.use(passport.initialize());
