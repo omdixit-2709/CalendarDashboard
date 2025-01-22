@@ -6,7 +6,7 @@ const Login = () => {
 
     const handleGoogleLogin = () => {
         // Use the environment variable for the API URL
-        window.location.href = `${API_URL}/auth/google`;
+        window.location.href = `https://calendar-dashboard-backend.onrender.com/auth/google`;
     };
 
     // Add handlers for terms and privacy links
